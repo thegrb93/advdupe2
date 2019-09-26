@@ -7,12 +7,9 @@
 
 	Version: 2.0
 ]]
-
 local REVISION = 5
-
-include "sh_codec_legacy.lua"
-AddCSLuaFile "sh_codec_legacy.lua"
-
+include"sh_codec_legacy.lua"
+AddCSLuaFile"sh_codec_legacy.lua"
 local pairs = pairs
 local type = type
 local error = error
@@ -29,9 +26,7 @@ local match = string.match
 local concat = table.concat
 local compress = util.Compress
 local decompress = util.Decompress
-
 AdvDupe2.CodecRevision = REVISION
-
 
 --[[
 	Name:	GenerateDupeStamp
@@ -40,468 +35,511 @@ AdvDupe2.CodecRevision = REVISION
 	Return:	<table> stamp
 ]]
 function AdvDupe2.GenerateDupeStamp(ply)
-	local stamp = {}
-	stamp.name = ply:GetName()
-	stamp.time = os.date("%I:%M %p")
-	stamp.date = os.date("%d %B %Y")
-	stamp.timezone = os.date("%z")
-	hook.Call("AdvDupe2_StampGenerated",GAMEMODE,stamp)
-	return stamp
+    local stamp = {}
+    stamp.name = ply:GetName()
+    stamp.time = os.date("%I:%M %p")
+    stamp.date = os.date("%d %B %Y")
+    stamp.timezone = os.date("%z")
+    hook.Call("AdvDupe2_StampGenerated", GAMEMODE, stamp)
+
+    return stamp
 end
 
 local function makeInfo(tbl)
-	local info = ""
-	for k,v in pairs(tbl) do
-		info = concat{info,k,"\1",v,"\1"}
-	end
-	return info.."\2"
+    local info = ""
+
+    for k, v in pairs(tbl) do
+        info = concat{info, k, "\1", v, "\1"}
+    end
+
+    return info .. "\2"
 end
 
 local AD2FF = "AD2F%s\n%s\n%s"
-
 local tables
+
 local buff = {
-	readbuffer = "",
-	writebuffer = {},
-	pos = 1
+    readbuffer = "",
+    writebuffer = {},
+    pos = 1
 }
 
-local function twos_compliment(x,bits)
-	local limit = math.ldexp(1, bits - 1)
-	if x>limit then return x - limit*2 else return x end
+local function twos_compliment(x, bits)
+    local limit = math.ldexp(1, bits - 1)
+
+    if x > limit then
+        return x - limit * 2
+    else
+        return x
+    end
 end
 
 local function PackIEEE754Double(number)
-	if number == 0 then
-		return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
-	elseif number == math.huge then
-		return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F)
-	elseif number == -math.huge then
-		return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF)
-	elseif number ~= number then
-		return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0xFF)
-	else
-		local sign = 0x00
-		if number < 0 then
-			sign = 0x80
-			number = -number
-		end
-		local mantissa, exponent = math.frexp(number)
-		exponent = exponent + 0x3FF
-		if exponent <= 0 then
-			mantissa = math.ldexp(mantissa, exponent - 1)
-			exponent = 0
-		elseif exponent > 0 then
-			if exponent >= 0x7FF then
-				return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, sign + 0x7F)
-			elseif exponent == 1 then
-				exponent = 0
-			else
-				mantissa = mantissa * 2 - 1
-				exponent = exponent - 1
-			end
-		end
-		mantissa = math.floor(math.ldexp(mantissa, 52) + 0.5)
-		return string.char(mantissa % 0x100,
-				math.floor(mantissa / 0x100) % 0x100,
-				math.floor(mantissa / 0x10000) % 0x100,
-				math.floor(mantissa / 0x1000000) % 0x100,
-				math.floor(mantissa / 0x100000000) % 0x100,
-				math.floor(mantissa / 0x10000000000) % 0x100,
-				(exponent % 0x10) * 0x10 + math.floor(mantissa / 0x1000000000000),
-				sign + math.floor(exponent / 0x10))
-	end
+    if number == 0 then
+        return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+    elseif number == math.huge then
+        return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F)
+    elseif number == -math.huge then
+        return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF)
+    elseif number ~= number then
+        return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0xFF)
+    else
+        local sign = 0x00
+
+        if number < 0 then
+            sign = 0x80
+            number = -number
+        end
+
+        local mantissa, exponent = math.frexp(number)
+        exponent = exponent + 0x3FF
+
+        if exponent <= 0 then
+            mantissa = math.ldexp(mantissa, exponent - 1)
+            exponent = 0
+        elseif exponent > 0 then
+            if exponent >= 0x7FF then
+                return string.char(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, sign + 0x7F)
+            elseif exponent == 1 then
+                exponent = 0
+            else
+                mantissa = mantissa * 2 - 1
+                exponent = exponent - 1
+            end
+        end
+
+        mantissa = math.floor(math.ldexp(mantissa, 52) + 0.5)
+
+        return string.char(mantissa % 0x100, math.floor(mantissa / 0x100) % 0x100, math.floor(mantissa / 0x10000) % 0x100, math.floor(mantissa / 0x1000000) % 0x100, math.floor(mantissa / 0x100000000) % 0x100, math.floor(mantissa / 0x10000000000) % 0x100, (exponent % 0x10) * 0x10 + math.floor(mantissa / 0x1000000000000), sign + math.floor(exponent / 0x10))
+    end
 end
 
 local function UnpackIEEE754Double(str, i)
-	local b8, b7, b6, b5, b4, b3, b2, b1 = string.byte(str, i, i+7)
-	local exponent = (b1 % 0x80) * 0x10 + math.floor(b2 / 0x10)
-	local mantissa = math.ldexp(((((((b2 % 0x10) * 0x100 + b3) * 0x100 + b4) * 0x100 + b5) * 0x100 + b6) * 0x100 + b7) * 0x100 + b8, -52)
-	if exponent == 0x7FF then
-		if mantissa > 0 then
-			return 0 / 0
-		else
-			if b1 >= 0x80 then
-				return -math.huge
-			else
-				return math.huge
-			end
-		end
-	elseif exponent > 0 then
-		mantissa = mantissa + 1
-	else
-		exponent = exponent + 1
-	end
-	if b1 >= 0x80 then
-		mantissa = -mantissa
-	end
-	return math.ldexp(mantissa, exponent - 0x3FF)
+    local b8, b7, b6, b5, b4, b3, b2, b1 = string.byte(str, i, i + 7)
+    local exponent = (b1 % 0x80) * 0x10 + math.floor(b2 / 0x10)
+    local mantissa = math.ldexp(((((((b2 % 0x10) * 0x100 + b3) * 0x100 + b4) * 0x100 + b5) * 0x100 + b6) * 0x100 + b7) * 0x100 + b8, -52)
+
+    if exponent == 0x7FF then
+        if mantissa > 0 then
+            return 0 / 0
+        else
+            if b1 >= 0x80 then
+                return -math.huge
+            else
+                return math.huge
+            end
+        end
+    elseif exponent > 0 then
+        mantissa = mantissa + 1
+    else
+        exponent = exponent + 1
+    end
+
+    if b1 >= 0x80 then
+        mantissa = -mantissa
+    end
+
+    return math.ldexp(mantissa, exponent - 0x3FF)
 end
 
 function buff:Skip(i)
-	self.pos = self.pos + i
+    self.pos = self.pos + i
 end
 
 function buff:Tell()
-	return self.pos
+    return self.pos
 end
 
 function buff:Read(n)
-	n = math.max(n, 0)
-	local str = string.sub(self.readbuffer, self.pos, self.pos+n-1)
-	self.pos = self.pos + n
-	return str
+    n = math.max(n, 0)
+    local str = string.sub(self.readbuffer, self.pos, self.pos + n - 1)
+    self.pos = self.pos + n
+
+    return str
 end
 
 function buff:ReadByte()
-	local ret = string.byte(self.readbuffer, self.pos)
-	self.pos = self.pos + 1
-	return ret
+    local ret = string.byte(self.readbuffer, self.pos)
+    self.pos = self.pos + 1
+
+    return ret
 end
 
 function buff:ReadUShort()
-	local a, b = string.byte(self.readbuffer, self.pos, self.pos+1)
-	self.pos = self.pos + 2
-	return b * 0x100 + a
+    local a, b = string.byte(self.readbuffer, self.pos, self.pos + 1)
+    self.pos = self.pos + 2
+
+    return b * 0x100 + a
 end
 
 function buff:ReadULong()
-	local a, b, c, d = string.byte(self.readbuffer, self.pos, self.pos+3)
-	self.pos = self.pos + 4
-	return d * 0x1000000 + c * 0x10000 + b * 0x100 + a
+    local a, b, c, d = string.byte(self.readbuffer, self.pos, self.pos + 3)
+    self.pos = self.pos + 4
+
+    return d * 0x1000000 + c * 0x10000 + b * 0x100 + a
 end
 
 function buff:ReadInt8()
-	return twos_compliment(self:ReadByte(),8)
+    return twos_compliment(self:ReadByte(), 8)
 end
 
 function buff:ReadShort()
-	return twos_compliment(self:ReadUShort(),16)
+    return twos_compliment(self:ReadUShort(), 16)
 end
 
 function buff:ReadLong()
-	return twos_compliment(self:ReadULong(),32)
+    return twos_compliment(self:ReadULong(), 32)
 end
 
 function buff:ReadDouble()
-	local ret = UnpackIEEE754Double(self.readbuffer, self.pos)
-	self.pos = self.pos + 8
-	return ret
+    local ret = UnpackIEEE754Double(self.readbuffer, self.pos)
+    self.pos = self.pos + 8
+
+    return ret
 end
 
 function buff:ReadUntil(byte)
-	local endpos = string.find(self.readbuffer, byte, self.pos, true)
-	endpos = endpos or (#self.readbuffer+1)
-	local str = string.sub(self.readbuffer, self.pos, endpos - 1)
-	self.pos = endpos
-	return str
+    local endpos = string.find(self.readbuffer, byte, self.pos, true)
+    endpos = endpos or (#self.readbuffer + 1)
+    local str = string.sub(self.readbuffer, self.pos, endpos - 1)
+    self.pos = endpos
+
+    return str
 end
 
 function buff:ReadString()
-	local ret = self:ReadUntil("\0")
-	self.pos = self.pos + 1
-	return ret
+    local ret = self:ReadUntil("\0")
+    self.pos = self.pos + 1
+
+    return ret
 end
 
 function buff:Write(bytes)
-	self.writebuffer[#self.writebuffer + 1] = bytes
+    self.writebuffer[#self.writebuffer + 1] = bytes
 end
 
 function buff:WriteByte(x)
-	self.writebuffer[#self.writebuffer + 1] = string.char(math.floor(x%256))
+    self.writebuffer[#self.writebuffer + 1] = string.char(math.floor(x % 256))
 end
 
 function buff:WriteShort(x)
-	self.writebuffer[#self.writebuffer + 1] = string.char(math.floor(x%256), math.floor(x/256)%256)
+    self.writebuffer[#self.writebuffer + 1] = string.char(math.floor(x % 256), math.floor(x / 256) % 256)
 end
 
 function buff:WriteLong(x)
-	self.writebuffer[#self.writebuffer + 1] = string.char(math.floor(x%256), math.floor(x/256)%256, math.floor(x/65536)%256, math.floor(x/16777216)%256)
+    self.writebuffer[#self.writebuffer + 1] = string.char(math.floor(x % 256), math.floor(x / 256) % 256, math.floor(x / 65536) % 256, math.floor(x / 16777216) % 256)
 end
 
 function buff:WriteDouble(x)
-	self.writebuffer[#self.writebuffer + 1] = PackIEEE754Double(x)
+    self.writebuffer[#self.writebuffer + 1] = PackIEEE754Double(x)
 end
 
 function buff:SetString(str)
-	self.readbuffer = str
-	self.pos = 1
+    self.readbuffer = str
+    self.pos = 1
 end
 
 function buff:GetString()
-	local ret = table.concat(self.writebuffer)
-	self.writebuffer = {}
-	return ret
+    local ret = table.concat(self.writebuffer)
+    self.writebuffer = {}
+
+    return ret
 end
 
-local function noserializer() end
+local function noserializer()
+end
 
 local enc = {}
-for i=1,255 do enc[i] = noserializer end
+
+for i = 1, 255 do
+    enc[i] = noserializer
+end
 
 local function isArray(tbl)
-	local ret = true
-	local m = 0
-	
-	for k, v in pairs(tbl) do
-		m = m + 1
-		if k ~= m or enc[TypeID(v)]==noserializer then
-			ret = false
-			break
-		end
-	end
+    local ret = true
+    local m = 0
 
-	return ret
+    for k, v in pairs(tbl) do
+        m = m + 1
+
+        if k ~= m or enc[TypeID(v)] == noserializer then
+            ret = false
+            break
+        end
+    end
+
+    return ret
 end
 
 local function write(obj)
-	enc[TypeID(obj)](obj)
+    enc[TypeID(obj)](obj)
 end
 
 local len
-local tables,tablesLookup
+local tables, tablesLookup
 
-enc[TYPE_TABLE] = function(obj) --table
-	tables = tables + 1
-	if not tablesLookup[obj] then
-		tablesLookup[obj] = tables
-	else
-		buff:WriteByte(247)
-		buff:WriteShort(tablesLookup[obj])
-		return
-	end
-	
-	if isArray(obj) then
-		buff:WriteByte(254)
-		for i,v in pairs(obj) do
-			write(v)
-		end
-	else
-		buff:WriteByte(255)
-		for k,v in pairs(obj) do
-			if(enc[TypeID(k)]!=noserializer and enc[TypeID(v)]!=noserializer)then
-				write(k)
-				write(v)
-			end
-		end
-	end
-	buff:WriteByte(246)
+--table
+enc[TYPE_TABLE] = function(obj)
+    tables = tables + 1
+
+    if not tablesLookup[obj] then
+        tablesLookup[obj] = tables
+    else
+        buff:WriteByte(247)
+        buff:WriteShort(tablesLookup[obj])
+
+        return
+    end
+
+    if isArray(obj) then
+        buff:WriteByte(254)
+
+        for i, v in pairs(obj) do
+            write(v)
+        end
+    else
+        buff:WriteByte(255)
+
+        for k, v in pairs(obj) do
+            if (enc[TypeID(k)] ~= noserializer and enc[TypeID(v)] ~= noserializer) then
+                write(k)
+                write(v)
+            end
+        end
+    end
+
+    buff:WriteByte(246)
 end
-enc[TYPE_BOOL] = function(obj) --boolean
-	buff:WriteByte(obj and 253 or 252)
+
+--boolean
+enc[TYPE_BOOL] = function(obj)
+    buff:WriteByte(obj and 253 or 252)
 end
-enc[TYPE_NUMBER] = function(obj) --number
-	buff:WriteByte(251)
-	buff:WriteDouble(obj)
+
+--number
+enc[TYPE_NUMBER] = function(obj)
+    buff:WriteByte(251)
+    buff:WriteDouble(obj)
 end
-enc[TYPE_VECTOR] = function(obj) --vector
-	buff:WriteByte(250)
-	buff:WriteDouble(obj.x)
-	buff:WriteDouble(obj.y)
-	buff:WriteDouble(obj.z)
+
+--vector
+enc[TYPE_VECTOR] = function(obj)
+    buff:WriteByte(250)
+    buff:WriteDouble(obj.x)
+    buff:WriteDouble(obj.y)
+    buff:WriteDouble(obj.z)
 end
-enc[TYPE_ANGLE] = function(obj) --angle
-	buff:WriteByte(249)
-	buff:WriteDouble(obj.p)
-	buff:WriteDouble(obj.y)
-	buff:WriteDouble(obj.r)
+
+--angle
+enc[TYPE_ANGLE] = function(obj)
+    buff:WriteByte(249)
+    buff:WriteDouble(obj.p)
+    buff:WriteDouble(obj.y)
+    buff:WriteDouble(obj.r)
 end
-enc[TYPE_STRING] = function(obj) --string
-	
-	len = #obj
-	
-	if len < 246 then
-		buff:WriteByte(len)
-		buff:Write(obj)
-	else
-		buff:WriteByte(248)
-		buff:WriteLong(len)
-		buff:Write(obj)
-	end
-	
+
+--string
+enc[TYPE_STRING] = function(obj)
+    len = #obj
+
+    if len < 246 then
+        buff:WriteByte(len)
+        buff:Write(obj)
+    else
+        buff:WriteByte(248)
+        buff:WriteLong(len)
+        buff:Write(obj)
+    end
 end
 
 local function error_nodeserializer()
-	buff:Skip(-1)
-	error(format("couldn't find deserializer for type {typeid:%d}", buff:ReadByte()))
+    buff:Skip(-1)
+    error(format("couldn't find deserializer for type {typeid:%d}", buff:ReadByte()))
 end
 
 local read4, read5
-
 local reference = 0
-do --Version 4
-	local dec = {}
-	for i=1,255 do dec[i] = error_nodeserializer end
 
-	local function read()
-		local tt = buff:ReadByte()
-		if not tt then
-			error("expected value, got EOF")
-		end
-		if tt == 0 then
-			return nil
-		end
-		return dec[tt]()
-	end
-	read4 = read
+--Version 4
+do
+    local dec = {}
 
-	dec[255] = function() --table
-		local t = {}
-		local k
-		reference = reference + 1
-		local ref = reference
-		repeat
-			k = read()
-			if k ~= nil then
-				t[k] = read()
-			end
-		until (k == nil)
-		tables[ref] = t
-		return t
-	end
+    for i = 1, 255 do
+        dec[i] = error_nodeserializer
+    end
 
-	dec[254] = function() --array
-		local t = {}
-		local k,v = 0
-		reference = reference + 1
-		local ref = reference
-		repeat
-			k = k + 1
-			v = read()
-			if(v != nil) then
-				t[k] = v
-			end
+    local function read()
+        local tt = buff:ReadByte()
 
-		until (v == nil)
-		tables[ref] = t
-		return t
-	end
+        if not tt then
+            error("expected value, got EOF")
+        end
 
-	dec[253] = function()
-		return true
-	end
-	dec[252] = function()
-		return false
-	end
-	dec[251] = function()
-		return buff:ReadDouble()
-	end
-	dec[250] = function()
-		return Vector(buff:ReadDouble(),buff:ReadDouble(),buff:ReadDouble())
-	end
-	dec[249] = function()
-		return Angle(buff:ReadDouble(),buff:ReadDouble(),buff:ReadDouble())
-	end
-	dec[248] = function() --null-terminated string
-		return buff:ReadString()
-	end
-	dec[247] = function() --table reference
-		reference = reference + 1
-		return tables[buff:ReadShort()]
-	end
+        if tt == 0 then return nil end
 
-	for i=1,246 do dec[i] = function() return buff:Read(i) end end
+        return dec[tt]()
+    end
+
+    read4 = read
+
+    --table
+    dec[255] = function()
+        local t = {}
+        local k
+        reference = reference + 1
+        local ref = reference
+        repeat
+            k = read()
+
+            if k ~= nil then
+                t[k] = read()
+            end
+        until (k == nil)
+        tables[ref] = t
+
+        return t
+    end
+
+    --array
+    dec[254] = function()
+        local t = {}
+        local k, v = 0
+        reference = reference + 1
+        local ref = reference
+        repeat
+            k = k + 1
+            v = read()
+
+            if (v ~= nil) then
+                t[k] = v
+            end
+        until (v == nil)
+        tables[ref] = t
+
+        return t
+    end
+
+    dec[253] = function() return true end
+    dec[252] = function() return false end
+    dec[251] = function() return buff:ReadDouble() end
+    dec[250] = function() return Vector(buff:ReadDouble(), buff:ReadDouble(), buff:ReadDouble()) end
+    dec[249] = function() return Angle(buff:ReadDouble(), buff:ReadDouble(), buff:ReadDouble()) end
+    dec[248] = function() return buff:ReadString() end --null-terminated string
+
+    --table reference
+    dec[247] = function()
+        reference = reference + 1
+
+        return tables[buff:ReadShort()]
+    end
+
+    for i = 1, 246 do
+        dec[i] = function() return buff:Read(i) end
+    end
 end
 
-do --Version 5
-	local dec = {}
-	for i=1,255 do dec[i] = error_nodeserializer end
+--Version 5
+do
+    local dec = {}
 
-	local function read()
-		local tt = buff:ReadByte()
-		if not tt then
-			error("expected value, got EOF")
-		end
-		return dec[tt]()
-	end
-	read5 = read
+    for i = 1, 255 do
+        dec[i] = error_nodeserializer
+    end
 
-	dec[255] = function() --table
-		local t = {}
-		reference = reference + 1
-		tables[reference] = t
+    local function read()
+        local tt = buff:ReadByte()
 
-		for k in read do
-			t[k] = read()
-		end
+        if not tt then
+            error("expected value, got EOF")
+        end
 
-		return t
-	end
+        return dec[tt]()
+    end
 
-	dec[254] = function() --array
-		local t = {}
-		reference = reference + 1
-		tables[reference] = t
+    read5 = read
 
-		local k = 1
-		for v in read do
-			t[k] = v
-			k = k + 1
-		end
+    --table
+    dec[255] = function()
+        local t = {}
+        reference = reference + 1
+        tables[reference] = t
 
-		return t
-	end
+        for k in read do
+            t[k] = read()
+        end
 
-	dec[253] = function()
-		return true
-	end
-	dec[252] = function()
-		return false
-	end
-	dec[251] = function()
-		return buff:ReadDouble()
-	end
-	dec[250] = function()
-		return Vector(buff:ReadDouble(),buff:ReadDouble(),buff:ReadDouble())
-	end
-	dec[249] = function()
-		return Angle(buff:ReadDouble(),buff:ReadDouble(),buff:ReadDouble())
-	end
-	dec[248] = function() -- Length>246 string
-		local slen = buff:ReadULong()
-		local retv = buff:Read(slen)
-		if(not retv)then retv="" end
-		return retv
-	end
-	dec[247] = function() --table reference
-		return tables[buff:ReadShort()]
-	end
-	dec[246] = function() --nil
-		return
-	end
+        return t
+    end
 
-	for i=1,245 do dec[i] = function() return buff:Read(i) end end
-	dec[0] = function() return "" end
+    --array
+    dec[254] = function()
+        local t = {}
+        reference = reference + 1
+        tables[reference] = t
+        local k = 1
+
+        for v in read do
+            t[k] = v
+            k = k + 1
+        end
+
+        return t
+    end
+
+    dec[253] = function() return true end
+    dec[252] = function() return false end
+    dec[251] = function() return buff:ReadDouble() end
+    dec[250] = function() return Vector(buff:ReadDouble(), buff:ReadDouble(), buff:ReadDouble()) end
+    dec[249] = function() return Angle(buff:ReadDouble(), buff:ReadDouble(), buff:ReadDouble()) end
+
+    -- Length>246 string
+    dec[248] = function()
+        local slen = buff:ReadULong()
+        local retv = buff:Read(slen)
+
+        if (not retv) then
+            retv = ""
+        end
+
+        return retv
+    end
+
+    dec[247] = function() return tables[buff:ReadShort()] end --table reference
+    dec[246] = function() return end --nil
+
+    for i = 1, 245 do
+        dec[i] = function() return buff:Read(i) end
+    end
+
+    dec[0] = function() return "" end
 end
 
 local function serialize(tbl)
-	tables = 0
-	tablesLookup = {}
+    tables = 0
+    tablesLookup = {}
+    write(tbl)
 
-	write(tbl)
-
-	return buff:GetString()
+    return buff:GetString()
 end
 
-
 local function deserialize(str, read)
-	
-	if(str==nil)then
-		error("File could not be decompressed.")
-		return {}
-	end
-	
-	tables = {}
-	reference = 0
-	buff:SetString(str)
-	local success, tbl = pcall(read)
-	buff:SetString("")
-	
-	if success then
-		return tbl
-	else
-		error(tbl)
-	end
+    if (str == nil) then
+        error("File could not be decompressed.")
+
+        return {}
+    end
+
+    tables = {}
+    reference = 0
+    buff:SetString(str)
+    local success, tbl = pcall(read)
+    buff:SetString("")
+
+    if success then
+        return tbl
+    else
+        error(tbl)
+    end
 end
 
 --[[
@@ -511,59 +549,62 @@ end
 	Return:	runs callback(<string> encoded_dupe, <...> args)
 ]]
 function AdvDupe2.Encode(dupe, info, callback, ...)
-	
-	local encodedTable = compress(serialize(dupe))
-	info.check = "\r\n\t\n"
-	info.size = #encodedTable
-	
-	callback(AD2FF:format(char(REVISION), makeInfo(info), encodedTable),...)
-	
+    local encodedTable = compress(serialize(dupe))
+    info.check = "\r\n\t\n"
+    info.size = #encodedTable
+    callback(AD2FF:format(char(REVISION), makeInfo(info), encodedTable), ...)
 end
 
 --seperates the header and body and converts the header to a table
 local function getInfo(str)
-	local last = str:find("\2")
-	if not last then
-		error("attempt to read AD2 file with malformed info block")
-	end
-	local info = {}
-	local ss = str:sub(1,last-1)
-	for k,v in ss:gmatch("(.-)\1(.-)\1") do
-		info[k] = v
-	end
-	
-	if info.check ~= "\r\n\t\n" then
-		if info.check == "\10\9\10" then
-			error("detected AD2 file corrupted in file transfer (newlines homogenized)(when using FTP, transfer AD2 files in image/binary mode, not ASCII/text mode)")
-		else
-			error("attempt to read AD2 file with malformed info block")
-		end
-	end
-	return info, str:sub(last+2)
+    local last = str:find("\2")
+
+    if not last then
+        error("attempt to read AD2 file with malformed info block")
+    end
+
+    local info = {}
+    local ss = str:sub(1, last - 1)
+
+    for k, v in ss:gmatch("(.-)\1(.-)\1") do
+        info[k] = v
+    end
+
+    if info.check ~= "\r\n\t\n" then
+        if info.check == "\10\9\10" then
+            error("detected AD2 file corrupted in file transfer (newlines homogenized)(when using FTP, transfer AD2 files in image/binary mode, not ASCII/text mode)")
+        else
+            error("attempt to read AD2 file with malformed info block")
+        end
+    end
+
+    return info, str:sub(last + 2)
 end
 
 --decoders for individual versions go here
 local versions = {}
-
 versions[1] = AdvDupe2.LegacyDecoders[1]
 versions[2] = AdvDupe2.LegacyDecoders[2]
 
 versions[3] = function(encodedDupe)
-	encodedDupe = encodedDupe:Replace("\r\r\n\t\r\n", "\t\t\t\t")
-	encodedDupe = encodedDupe:Replace("\r\n\t\n", "\t\t\t\t")
-	encodedDupe = encodedDupe:Replace("\r\n", "\n")
-	encodedDupe = encodedDupe:Replace("\t\t\t\t", "\r\n\t\n")
-	return versions[4](encodedDupe)
+    encodedDupe = encodedDupe:Replace("\r\r\n\t\r\n", "\t\t\t\t")
+    encodedDupe = encodedDupe:Replace("\r\n\t\n", "\t\t\t\t")
+    encodedDupe = encodedDupe:Replace("\r\n", "\n")
+    encodedDupe = encodedDupe:Replace("\t\t\t\t", "\r\n\t\n")
+
+    return versions[4](encodedDupe)
 end
 
 versions[4] = function(encodedDupe)
-	local info, dupestring = getInfo(encodedDupe:sub(7))
-	return deserialize(decompress(dupestring), read4), info
+    local info, dupestring = getInfo(encodedDupe:sub(7))
+
+    return deserialize(decompress(dupestring), read4), info
 end
 
 versions[5] = function(encodedDupe)
-	local info, dupestring = getInfo(encodedDupe:sub(7))
-	return deserialize(decompress(dupestring), read5), info
+    local info, dupestring = getInfo(encodedDupe:sub(7))
+
+    return deserialize(decompress(dupestring), read5), info
 end
 
 --[[
@@ -573,44 +614,40 @@ end
 	Return:	runs callback(<boolean> success, <table/string> tbl, <table> info)
 ]]
 function AdvDupe2.Decode(encodedDupe)
-	
-	local sig, rev = encodedDupe:match("^(....)(.)")
-	
-	if not rev then
-		return false, "malformed dupe (wtf <5 chars long?!)"
-	end
-	
-	rev = rev:byte()
-	
-	if sig ~= "AD2F" then
-		if sig == "[Inf" then --legacy support, ENGAGE (AD1 dupe detected)
-			local success, tbl, info, moreinfo = pcall(AdvDupe2.LegacyDecoders[0], encodedDupe)
+    local sig, rev = encodedDupe:match("^(....)(.)")
+    if not rev then return false, "malformed dupe (wtf <5 chars long?!)" end
+    rev = rev:byte()
 
-			if success then
-				info.size = #encodedDupe
-				info.revision = 0
-				info.ad1 = true
-			else
-				ErrorNoHalt(tbl)
-			end
+    if sig ~= "AD2F" then
+        --legacy support, ENGAGE (AD1 dupe detected)
+        if sig == "[Inf" then
+            local success, tbl, info, moreinfo = pcall(AdvDupe2.LegacyDecoders[0], encodedDupe)
 
-			return success, tbl, info, moreinfo
-		else
-			return false, "unknown duplication format"
-		end
-	elseif rev > REVISION then
-		return false, format("Newer codec needed. (have rev %u, need rev %u) Update Advdupe2.",REVISION,rev)
-	elseif rev < 1 then
-		return false, format("attempt to use an invalid format revision (rev %d)", rev)
-	else
-		local success, tbl, info = pcall(versions[rev], encodedDupe)
-		
-		if success then
-			info.revision = rev
-		else
-			ErrorNoHalt(tbl)
-		end
-		
-		return success, tbl, info
-	end
+            if success then
+                info.size = #encodedDupe
+                info.revision = 0
+                info.ad1 = true
+            else
+                ErrorNoHalt(tbl)
+            end
+
+            return success, tbl, info, moreinfo
+        else
+            return false, "unknown duplication format"
+        end
+    elseif rev > REVISION then
+        return false, format("Newer codec needed. (have rev %u, need rev %u) Update Advdupe2.", REVISION, rev)
+    elseif rev < 1 then
+        return false, format("attempt to use an invalid format revision (rev %d)", rev)
+    else
+        local success, tbl, info = pcall(versions[rev], encodedDupe)
+
+        if success then
+            info.revision = rev
+        else
+            ErrorNoHalt(tbl)
+        end
+
+        return success, tbl, info
+    end
 end
